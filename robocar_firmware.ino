@@ -38,6 +38,17 @@ void setup()
 
 void loop() 
 {
+  //Get serial input
+  while(serial.available())
+  {
+    char c = Serial.read();
+
+    if(c == 1)
+    {
+      
+    }
+  }
+  
   //Do correct mode stuff
   switch(mode)
   {
