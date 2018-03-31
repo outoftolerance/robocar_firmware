@@ -19,6 +19,8 @@ int throttle_pwm = 0;
 int steering_pwm = 0;
 int throttle_trim_pwm = 0;
 int steering_trim_pwm = 0;
+const int center_pwm = 1500;
+const int zero_pwm = 1000;
 
 void setup() 
 {
@@ -80,10 +82,17 @@ void loop()
       //Set outputs
       throttle.writeMicroseconds(throttle_pwm);
       steering.writeMicroseconds(steering_pwm);
+
     //Guided Mode
     case 1:
       //Set outputs
       throttle.writeMicroseconds(throttle_pwm);
       steering.writeMicroseconds(steering_pwm);
+
+    //Default (do nothing)
+    default:
+      //Set outputs
+      throttle.writeMicroseconds(zero_pwm);
+      steering.writeMicroseconds(center_pwm);      
   }
 }
