@@ -16,15 +16,20 @@ const int serial_baud = 9600;
 
 //Global variables
 int mode = 0; //0 = manual, 1 = guided, 
-int throttle_millis = 0;
-int steering_millis = 0;
-int throttle_trim_millis = 0;
-int steering_trim_millis = 0;
+int throttle_millis = 0;  //Commanded throttle
+int steering_millis = 0;  //Commanded steering
+int throttle_trim_millis = 0; //Commanded throttle trim
+int steering_trim_millis = 0; //Commanded steeting trim
+int throttle_millis_output = 0; //Calculated throttle output
+int steering_millis_output = 0; //Calculated steeting output
 
 //Default PWM values for different states
 const int max_millis = 2000;
 const int center_millis = 1500;
-const int zero_millis = 1000;
+const int min_millis = 1000;
+
+//Vehicle control settings
+const bool enable_reverse = FALSE;
 
 //Serial protocol defines
 #define MSG_START_CHAR = '$';
@@ -55,43 +60,6 @@ void setup()
 //Main program loop
 void loop() 
 {
-  //Get serial input
-  while(serial.available())
-  {
-    char c = serial.read();
-
-    //Detect start of message
-    if(c == '$')
-    {
-      //Get message type
-      c = serial.read();
-
-      //Switch to correct action
-      switch(c)
-      {
-        case MSG_TYPE_SET_MODE:
-          mode = serial.parseInt();
-          break;
-
-        case MSG_TYPE_SET_STEERTING:
-          steering_millis = serial.parseInt();
-          break;
-
-        case MSG_TYPE_SET_TROTTLE:
-          throttle_millis = serial.parseInt();
-          break;
-
-        case MSG_TYPE_TRIM_STEERING:
-          steering_trim_millis += serial.parseInt();
-          break;
-
-        case MSG_TYPE_TRIM_TROTTLE:
-          throttle_trim_millis += serial.parseInt();
-          break;
-      }
-    }
-  }
-  
   //Switch based on modes
   switch(mode)
   {
@@ -101,40 +69,113 @@ void loop()
       throttle_millis = pulseIn(throttle_in_pin, HIGH);
       steering_millis = pulseIn(steering_in_pin, HIGH);
 
-      //Validate Throttle input
-      if(throttle_millis == 0)
+      //Get serial input, but only allow mode and trim changes
+      while(serial.available())
       {
-        throttle_millis = 1000 + throttle_trim_millis;
+        char c = serial.read();
+
+        //Detect start of message
+        if(c == '$')
+        {
+          //Get message type
+          c = serial.read();
+
+          //Switch to correct action
+          switch(c)
+          {
+            case MSG_TYPE_SET_MODE:
+              mode = serial.parseInt();
+              break;
+
+            case MSG_TYPE_TRIM_STEERING:
+              steering_trim_millis += serial.parseInt();
+              break;
+
+            case MSG_TYPE_TRIM_TROTTLE:
+              throttle_trim_millis += serial.parseInt();
+              break;
+          }
+        }
       }
-      else
-      {
-        throttle_millis += throttle_trim;
-      }
-      
-      //Validate Steering input
-      if(steering_millis == 0)
-      {
-        steering_millis = 1500 + steering_trim_millis;
-      }
-      else
-      {
-        steering_millis += steering_trim;
-      }
-      
-      throttle.writeMicroseconds(throttle_millis);
-      steering.writeMicroseconds(steering_millis);
       break;
 
     //Guided Mode
     case 1:
-      throttle.writeMicroseconds(throttle_millis);
-      steering.writeMicroseconds(steering_millis);
+      //Get serial input and allow all message types
+      while(serial.available())
+      {
+        char c = serial.read();
+
+        //Detect start of message
+        if(c == '$')
+        {
+          //Get message type
+          c = serial.read();
+
+          //Switch to correct action
+          switch(c)
+          {
+            case MSG_TYPE_SET_MODE:
+              mode = serial.parseInt();
+              break;
+
+            case MSG_TYPE_SET_STEERTING:
+              steering_millis = serial.parseInt();
+              break;
+
+            case MSG_TYPE_SET_TROTTLE:
+              throttle_millis = serial.parseInt();
+              break;
+
+            case MSG_TYPE_TRIM_STEERING:
+              steering_trim_millis += serial.parseInt();
+              break;
+
+            case MSG_TYPE_TRIM_TROTTLE:
+              throttle_trim_millis += serial.parseInt();
+              break;
+          }
+        }
+      }
       break;
 
-    //Default (do nothing)
+    //Default mode (do nothing)
     default:
-      throttle.writeMicroseconds(zero_millis);
-      steering.writeMicroseconds(center_millis);
+      //Set the steering and throttle to nothing
+      throttle_millis = center_millis;  //Center is zero throttle since ESC has reverse mode
+      steering_millis = center_millis;
+
+      //Reset trims to zero
+      throttle_trim_millis = 0;
+      steering_trim_millis = 0;
       break;
   }
+
+  //Calculate output values
+  throttle_millis_output = throttle_millis + throttle_trim_millis;
+  steering_millis_output = steering_millis + steering_trim_millis;
+
+  //Validate throttle output is sane
+  if(throttle_millis_output < min_millis)
+  {
+    throttle_millis_output = min_millis;
+  }
+  else if(throttle_millis_output > max_millis)
+  {
+    throttle_millis_output = max_millis;
+  }
+
+  //Validate steering output is sane
+  if(steering_millis_output < min_millis)
+  {
+    steering_millis_output = min_millis;
+  }
+  else if(steering_millis_output > max_millis)
+  {
+    steering_millis_output = max_millis;
+  }
+
+  //Write output PWM values
+  throttle.writeMicroseconds(throttle_millis_output);
+  steering.writeMicroseconds(steering_millis_output);
 }
